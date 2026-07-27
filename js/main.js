@@ -1,6 +1,6 @@
 // ============================================
 // JANECEK HOMES - SHARED SCRIPTS
-// ============================================
+// ===========================================
 
 // Nav scroll behavior
 const nav = document.querySelector('.nav');
@@ -275,5 +275,89 @@ document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
   frame.addEventListener('click', play);
   frame.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(); }
+  });
+})();
+
+
+/* ---- Contact forms → Resend (posts to /api/contact serverless function) ---- */
+(function () {
+  var forms = document.querySelectorAll('form');
+  if (!forms.length) return;
+
+  function fieldKey(el) {
+    if (el.name) return el.name;
+    var id = el.id || '';
+    return id.replace(/^[a-z]{1,3}-/, '') || 'field';   // ff-email -> email, rf-plan -> plan
+  }
+
+  function serialize(form) {
+    var data = {};
+    form.querySelectorAll('input, select, textarea').forEach(function (el) {
+      if (!el || el.disabled) return;
+      var key = fieldKey(el);
+      if (el.type === 'checkbox') {
+        if (el.checked) data[key] = 'Yes';
+      } else if (el.type === 'radio') {
+        if (el.checked) data[key] = el.value;
+      } else if (el.value && el.value.trim() !== '') {
+        data[key] = el.value.trim();
+      }
+    });
+    return data;
+  }
+
+  function setStatus(form, msg, ok) {
+    var s = form.querySelector('.jh-form-status');
+    if (!s) {
+      s = document.createElement('p');
+      s.className = 'jh-form-status';
+      s.setAttribute('role', 'status');
+      s.setAttribute('aria-live', 'polite');
+      s.style.margin = '1.25rem 0 0';
+      s.style.fontSize = '0.95rem';
+      s.style.lineHeight = '1.5';
+      form.appendChild(s);
+    }
+    s.textContent = msg;
+    s.style.color = ok ? 'var(--gold, #b8925a)' : '#e07a7a';
+    s.style.display = msg ? 'block' : 'none';
+  }
+
+  forms.forEach(function (form) {
+    form.onsubmit = null;               // neutralize the old inline alert() handler
+    form.removeAttribute('onsubmit');
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = form.querySelector('button[type="submit"], button:not([type])');
+      var label = btn ? btn.textContent : '';
+      setStatus(form, '', true);
+
+      var payload = serialize(form);
+      payload._form = document.title;
+      if (!payload.email) {
+        setStatus(form, 'Please enter your email so we can reply.', false);
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+      fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { if (!r.ok) throw new Error('bad status'); return r; })
+        .then(function () {
+          form.reset();
+          setStatus(form, "Thank you — we'll be in touch within 24 hours.", true);
+        })
+        .catch(function () {
+          setStatus(form, 'Sorry, something went wrong. Please call 928.486.5645 or email info@janecekhomes.com.', false);
+        })
+        .finally(function () {
+          if (btn) { btn.disabled = false; btn.textContent = label; }
+        });
+    });
   });
 })();
